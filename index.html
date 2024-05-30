@@ -78,10 +78,11 @@
     hands.onResults(onResults);
 
     // Three.js setup
-    let renderer, scene, camera, bracelet;
+    let renderer, scene, camera, bracelet, occluder;
     try {
       renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, alpha: true });
       renderer.setSize(threeCanvas.width, threeCanvas.height);
+      renderer.autoClear = false; // Disable automatic clearing of the depth buffer
       scene = new THREE.Scene();
       camera = new THREE.OrthographicCamera(
         -threeCanvas.width / 2, threeCanvas.width / 2,
@@ -119,6 +120,21 @@
       console.error('An error occurred loading the bracelet model: ', error);
     });
 
+    loader.load('wristOccluder.glb', (gltf) => {
+      occluder = gltf.scene;
+      occluder.traverse((child) => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshBasicMaterial({ colorWrite: false });
+          child.renderOrder = 0;
+        }
+      });
+      scene.add(occluder);
+      occluder.visible = true; // Make the occluder visible to the depth buffer
+      console.log('Occluder model loaded successfully');
+    }, undefined, (error) => {
+      console.error('An error occurred loading the occluder model: ', error);
+    });
+
     // Function to calculate the distance between two landmarks
     function calculateDistance(landmark1, landmark2) {
       const dx = landmark1.x - landmark2.x;
@@ -127,10 +143,6 @@
       return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
-    const axesHelper = new THREE.AxesHelper(100);
-    scene.add(axesHelper);
-
-    // create landmark
     let cubes = [];
 
     // Function to create a cube
@@ -170,6 +182,7 @@
         });
         cubes = []; // Reset the cubes array
         bracelet.visible = false; // Hide the bracelet when no hands are detected
+        occluder.visible = false; // Hide the occluder when no hands are detected
         renderer.render(scene, camera);
       }
 
@@ -211,9 +224,15 @@
             const wristY = -wrist.y * outputCanvas.height + outputCanvas.height / 2;
             const wristZ = -wrist.z * 100;
 
+            console.log(wristX, wristY, wristZ);
+
             bracelet.position.set(wristX, wristY, wristZ);
             bracelet.scale.set(wristSize * 100, wristSize * 100, wristSize * 100);
             bracelet.visible = true; // Show the bracelet when hands are detected
+
+            occluder.position.set(wristX, wristY, wristZ);
+            occluder.scale.set(wristSize * 50, wristSize * 50, wristSize * 50);
+            occluder.visible = true; // Show the occluder when hands are detected
 
             // Calculate rotation to face the user
             const handDirection = new THREE.Vector3(
@@ -233,14 +252,23 @@
 
             const handRotation = new THREE.Euler().setFromQuaternion(quaternion);
             bracelet.rotation.copy(handRotation);
+            occluder.rotation.copy(handRotation);
 
             // Adjust the bracelet orientation to ensure it faces the correct direction
             bracelet.rotation.z += Math.PI / 2;
+            occluder.rotation.z += Math.PI / 2;
           }
         });
 
-        // Render the scene with the updated axes helper position and rotation
-        renderer.render(scene, camera);
+        // Render the scene in two passes
+        renderer.clear();
+        renderer.render(scene, camera); // Render occluder to depth buffer
+        renderer.clearDepth(); // Clear depth buffer for next pass
+        occluder.visible = false; // Hide occluder visually
+        bracelet.visible = true; // Show bracelet
+        renderer.render(scene, camera); // Render bracelet
+
+        renderer.autoClear = true; // Restore autoClear setting
       }
 
       outputCtx.restore();
