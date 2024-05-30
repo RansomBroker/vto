@@ -79,8 +79,6 @@
 
     // Three.js setup
     let renderer, scene, camera, bracelet;
-    const wristCubes = [];
-
     try {
       renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, alpha: true });
       renderer.setSize(threeCanvas.width, threeCanvas.height);
@@ -91,32 +89,30 @@
         -1000, 1000
       );
       camera.position.z = 1;
+
+      // Add ambient light to the scene
+      const ambientLight = new THREE.AmbientLight(0x404040, 3); // soft white light
+      scene.add(ambientLight);
+
+      // Add directional light to the scene
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+      directionalLight.position.set(0, 1, 1).normalize();
+      scene.add(directionalLight);
+
     } catch (e) {
       console.error('WebGL not supported, falling back on experimental-webgl', e);
       renderer = null;
       alert('WebGL not supported, please update your browser or GPU drivers.');
     }
 
-    // Load the bracelet model
     const loader = new THREE.GLTFLoader();
-    loader.load('casio.glb', (gltf) => {
+    loader.load('gelang_2.glb', (gltf) => {
       bracelet = gltf.scene;
       scene.add(bracelet);
       console.log('Bracelet model loaded successfully');
     }, undefined, (error) => {
       console.error('An error occurred loading the bracelet model: ', error);
     });
-
-    const cubes = [];
-
-    // Function to create a cube
-    function createCube(x, y, z, color = 0x00ff00) {
-      const geometry = new THREE.BoxGeometry(10, 10, 10);
-      const material = new THREE.MeshBasicMaterial({ color });
-      const cube = new THREE.Mesh(geometry, material);
-      scene.add(cube);
-      return cube;
-    }
 
     // Function to calculate the distance between two landmarks
     function calculateDistance(landmark1, landmark2) {
@@ -126,47 +122,35 @@
       return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
+    const axesHelper = new THREE.AxesHelper(100);
+    scene.add(axesHelper);
 
-    // Reference pose angles
-    let referenceAngles = { x: 0, y: 0, z: 0 };
+    // create landmark
+    const cubes = [];
 
-    // Function to calculate reference angles based on the given reference pose image
-    function calculateReferenceAngles(landmarks) {
-      const wristIndex = 0; // Wrist landmark index
-      const indexBaseIndex = 5; // Index finger base landmark index
-      const pinkyBaseIndex = 17; // Pinky finger base landmark index
+    // Function to create a cube
+    function createCube(x, y, z) {
+      const geometry = new THREE.BoxGeometry(10, 10, 10);
+      
+      // Function to generate a random color
+      function getRandomColor() {
+        return Math.floor(Math.random() * 16777215);
+      }
 
-      const dx = landmarks[pinkyBaseIndex].x - landmarks[indexBaseIndex].x;
-      const dy = landmarks[pinkyBaseIndex].y - landmarks[indexBaseIndex].y;
-      const dz = landmarks[pinkyBaseIndex].z - landmarks[indexBaseIndex].z;
+      // Create an array of materials, one for each face
+      const materials = [
+        new THREE.MeshBasicMaterial({ color: getRandomColor() }), // Right face
+        new THREE.MeshBasicMaterial({ color: getRandomColor() }), // Left face
+        new THREE.MeshBasicMaterial({ color: getRandomColor() }), // Top face
+        new THREE.MeshBasicMaterial({ color: getRandomColor() }), // Bottom face
+        new THREE.MeshBasicMaterial({ color: getRandomColor() }), // Front face
+        new THREE.MeshBasicMaterial({ color: getRandomColor() })  // Back face
+      ];
 
-      referenceAngles.z = Math.atan2(dy, dx);
-      referenceAngles.x = Math.atan2(dy, dz);
-      referenceAngles.y = Math.atan2(dx, dz);
-    }
-
-    // Initialize with reference angles based on the initial hand pose
-    async function initializeReferenceAngles() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      videoElement.srcObject = stream;
-      await videoElement.play();
-
-      hands.onResults(results => {
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-          calculateReferenceAngles(results.multiHandLandmarks[0]);
-          hands.onResults(onResults); // Switch back to the main results handler
-        }
-      });
-
-      const cameraStream = new Camera(videoElement, {
-        onFrame: async () => {
-          await hands.send({ image: videoElement });
-        },
-        width: 640,
-        height: 480
-      });
-
-      cameraStream.start();
+      const cube = new THREE.Mesh(geometry, materials);
+      cube.position.set(x, y, z);
+      scene.add(cube);
+      return cube;
     }
 
     // Function to handle results from MediaPipe Hands
@@ -194,51 +178,63 @@
             }
           });
 
-          // Calculate wrist size using landmarks 0, 1, and 5
           if (landmarks.length > 5) {
             const wristSize = calculateDistance(landmarks[0], landmarks[1]) +
                               calculateDistance(landmarks[1], landmarks[5]) +
                               calculateDistance(landmarks[5], landmarks[0]);
-            //console.log(`Wrist size for hand ${handIndex}: ${wristSize}`);
 
             // Position and scale the bracelet
             const wristX = landmarks[0].x * outputCanvas.width - outputCanvas.width / 2;
             const wristY = -landmarks[0].y * outputCanvas.height + outputCanvas.height / 2;
             const wristZ = -landmarks[0].z * 100;
 
-            //bracelet.position.set(wristX * 320, wristY * 240, wristZ);
-            bracelet.scale.set(wristSize * 20 , wristSize * 20, wristSize* 20);
+            bracelet.position.set(wristX, wristY, wristZ);
+            bracelet.scale.set(wristSize * 50, wristSize * 50, wristSize * 50);
+
+            // Calculate rotation to face the user
+            const wrist = landmarks[0];
+            const indexFingerBase = landmarks[5];
+            const middleFingerBase = landmarks[9];
+
+            const handDirection = new THREE.Vector3(
+              indexFingerBase.x - wrist.x,
+              indexFingerBase.y - wrist.y,
+              indexFingerBase.z - wrist.z
+            ).normalize();
+
+            const upDirection = new THREE.Vector3(
+              middleFingerBase.x - wrist.x,
+              middleFingerBase.y - wrist.y,
+              middleFingerBase.z - wrist.z
+            ).normalize();
+
+            const quaternion = new THREE.Quaternion();
+            quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), handDirection);
+
+            const handRotation = new THREE.Euler().setFromQuaternion(quaternion);
+            bracelet.rotation.copy(handRotation);
+
+            // Adjust the bracelet orientation to ensure it faces the correct direction
+            bracelet.rotation.z += Math.PI / 2;
           }
-
-          // Position and rotate the bracelet model on the wrist landmark
-          const wristIndex = 0; // Wrist landmark index
-          const indexBaseIndex = 5; // Index finger base landmark index
-          const pinkyBaseIndex = 17; // Pinky finger base landmark index
-
-          // Calculate the rotation angles
-          const dx = landmarks[pinkyBaseIndex].x - landmarks[indexBaseIndex].x;
-          const dy = landmarks[pinkyBaseIndex].y - landmarks[indexBaseIndex].y;
-          const dz = landmarks[pinkyBaseIndex].z - landmarks[indexBaseIndex].z;
-
-          const angleZ = Math.atan2(dy, dx) - referenceAngles.z;
-          const angleX = Math.atan2(dy, dz) - referenceAngles.x;
-          const angleY = Math.atan2(dx, dz) - referenceAngles.y;
-
-          // Apply the rotations to the bracelet model
-          bracelet.rotation.set(angleX, 0, 0);
-
-          // Log the rotation angles
-          console.log(`Rotation angles: x=${angleX.toFixed(2)}, y=${angleY.toFixed(2)}, z=${angleZ.toFixed(2)}`);
         });
-        // Render the scene with the updated cube positions
+
+        // Render the scene with the updated axes helper position and rotation
         renderer.render(scene, camera);
       }
 
       outputCtx.restore();
     }
 
-    // Start the camera stream and initialize the reference angles
-    initializeReferenceAngles();
+    const cameraStream = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480
+    });
+
+    cameraStream.start();
   </script>
 </body>
 </html>
