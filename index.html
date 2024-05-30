@@ -54,7 +54,7 @@
     // Function to start the video stream
     async function startVideo() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         videoElement.srcObject = stream;
         await videoElement.play();
       } catch (err) {
@@ -99,6 +99,10 @@
       directionalLight.position.set(0, 1, 1).normalize();
       scene.add(directionalLight);
 
+      // Adjust the directional light to face the camera
+      directionalLight.target.position.set(0, 0, -1);
+      scene.add(directionalLight.target);
+
     } catch (e) {
       console.error('WebGL not supported, falling back on experimental-webgl', e);
       renderer = null;
@@ -106,9 +110,10 @@
     }
 
     const loader = new THREE.GLTFLoader();
-    loader.load('gelang_2.glb', (gltf) => {
+    loader.load('gelang_1.glb', (gltf) => {
       bracelet = gltf.scene;
       scene.add(bracelet);
+      bracelet.visible = false; // Hide the bracelet initially
       console.log('Bracelet model loaded successfully');
     }, undefined, (error) => {
       console.error('An error occurred loading the bracelet model: ', error);
@@ -126,7 +131,7 @@
     scene.add(axesHelper);
 
     // create landmark
-    const cubes = [];
+    let cubes = [];
 
     // Function to create a cube
     function createCube(x, y, z) {
@@ -155,9 +160,24 @@
 
     // Function to handle results from MediaPipe Hands
     function onResults(results) {
+      // Clear the canvas and Three.js scene if no hands are detected
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        // Remove cubes from the scene
+        cubes.forEach(cubeArray => {
+          cubeArray.forEach(cube => {
+            scene.remove(cube);
+          });
+        });
+        cubes = []; // Reset the cubes array
+        bracelet.visible = false; // Hide the bracelet when no hands are detected
+        renderer.render(scene, camera);
+      }
+
       // Draw video feed and landmarks on the output canvas
       outputCtx.save();
       outputCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+      outputCtx.translate(outputCanvas.width, 0);
+      outputCtx.scale(-1, 1); // Flip the canvas horizontally to correct the mirror effect
       outputCtx.drawImage(results.image, 0, 0, outputCanvas.width, outputCanvas.height);
 
       if (results.multiHandLandmarks) {
@@ -165,8 +185,9 @@
           if (!cubes[handIndex]) {
             cubes[handIndex] = [];
           }
+          
           landmarks.forEach((landmark, index) => {
-            const x = landmark.x * outputCanvas.width - outputCanvas.width / 2;
+            const x = (1 - landmark.x) * outputCanvas.width - outputCanvas.width / 2;
             const y = -landmark.y * outputCanvas.height + outputCanvas.height / 2;
             const z = -landmark.z * 100; // Scale z for better visualization
 
@@ -179,31 +200,30 @@
           });
 
           if (landmarks.length > 5) {
-            const wristSize = calculateDistance(landmarks[0], landmarks[1]) +
-                              calculateDistance(landmarks[1], landmarks[5]) +
-                              calculateDistance(landmarks[5], landmarks[0]);
-
-            // Position and scale the bracelet
-            const wristX = landmarks[0].x * outputCanvas.width - outputCanvas.width / 2;
-            const wristY = -landmarks[0].y * outputCanvas.height + outputCanvas.height / 2;
-            const wristZ = -landmarks[0].z * 100;
-
-            bracelet.position.set(wristX, wristY, wristZ);
-            bracelet.scale.set(wristSize * 50, wristSize * 50, wristSize * 50);
-
-            // Calculate rotation to face the user
             const wrist = landmarks[0];
             const indexFingerBase = landmarks[5];
             const middleFingerBase = landmarks[9];
 
+            const wristSize = calculateDistance(wrist, indexFingerBase) + calculateDistance(indexFingerBase, middleFingerBase);
+
+            // Position and scale the bracelet
+            const wristX = (1 - wrist.x) * outputCanvas.width - outputCanvas.width / 2;
+            const wristY = -wrist.y * outputCanvas.height + outputCanvas.height / 2;
+            const wristZ = -wrist.z * 100;
+
+            bracelet.position.set(wristX, wristY, wristZ);
+            bracelet.scale.set(wristSize * 100, wristSize * 100, wristSize * 100);
+            bracelet.visible = true; // Show the bracelet when hands are detected
+
+            // Calculate rotation to face the user
             const handDirection = new THREE.Vector3(
-              indexFingerBase.x - wrist.x,
+              (1 - indexFingerBase.x) - (1 - wrist.x),
               indexFingerBase.y - wrist.y,
               indexFingerBase.z - wrist.z
             ).normalize();
 
             const upDirection = new THREE.Vector3(
-              middleFingerBase.x - wrist.x,
+              (1 - middleFingerBase.x) - (1 - wrist.x),
               middleFingerBase.y - wrist.y,
               middleFingerBase.z - wrist.z
             ).normalize();
