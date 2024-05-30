@@ -74,14 +74,15 @@
       hands.setOptions({
         maxNumHands: 2,
         modelComplexity: 1,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7,
       });
 
       hands.onResults(onResults);
 
       // Three.js setup
       let renderer, scene, camera, bracelet, occluder;
+      let axs;
       try {
         renderer = new THREE.WebGLRenderer({
           canvas: threeCanvas,
@@ -112,6 +113,9 @@
         // Adjust the directional light to face the camera
         directionalLight.target.position.set(0, 0, -1);
         scene.add(directionalLight.target);
+
+        // Create and add the axs helper
+        axs = createAxsHelper(50);
       } catch (e) {
         console.error(
           "WebGL not supported, falling back on experimental-webgl",
@@ -207,6 +211,12 @@
         return cube;
       }
 
+      function createAxsHelper(size = 1) {
+        const axesHelper = new THREE.AxesHelper(size);
+        scene.add(axesHelper);
+        return axesHelper;
+      }
+
       // Function to handle results from MediaPipe Hands
       function onResults(results) {
         // Clear the canvas and Three.js scene if no hands are detected
@@ -260,8 +270,11 @@
 
             if (landmarks.length > 5) {
               const wrist = landmarks[0];
+              const thumbBase = landmarks[1];
               const indexFingerBase = landmarks[5];
               const middleFingerBase = landmarks[9];
+              const ringFingerBase = landmarks[13];
+              const pinkyBase = landmarks[17];
 
               const wristSize =
                 calculateDistance(wrist, indexFingerBase) +
@@ -274,15 +287,18 @@
                 -wrist.y * outputCanvas.height + outputCanvas.height / 2;
               const wristZ = -wrist.z * 100;
 
-              bracelet.position.set(wristX, wristY, wristZ);
+              bracelet.position.set(wristX, wristY * 1.25, wristZ);
+              console.log("bracelet potition", wristX, wristY, wristZ);
+
               bracelet.scale.set(
                 wristSize * 100,
                 wristSize * 100,
                 wristSize * 100
               );
+
               bracelet.visible = true; // Show the bracelet when hands are detected
 
-              occluder.position.set(wristX, wristY, wristZ);
+              occluder.position.set(wristX, wristY * 1.25, wristZ);
               occluder.scale.set(
                 wristSize * 78,
                 wristSize * 78,
@@ -290,11 +306,37 @@
               );
               occluder.visible = true; // Show the occluder when hands are detected
 
-              // Calculate rotation to face the user
+              // Update the position of the axs helper
+              if (axs) {
+                axs.position.set(wristX, wristY, wristZ);
+              }
+
+              // Calculate the average position of the finger bases
+              const avgFingerBase = new THREE.Vector3(
+                (thumbBase.x +
+                  indexFingerBase.x +
+                  middleFingerBase.x +
+                  ringFingerBase.x +
+                  pinkyBase.x) /
+                  5,
+                (thumbBase.y +
+                  indexFingerBase.y +
+                  middleFingerBase.y +
+                  ringFingerBase.y +
+                  pinkyBase.y) /
+                  5,
+                (thumbBase.z +
+                  indexFingerBase.z +
+                  middleFingerBase.z +
+                  ringFingerBase.z +
+                  pinkyBase.z) /
+                  5
+              );
+
               const handDirection = new THREE.Vector3(
-                1 - indexFingerBase.x - (1 - wrist.x),
-                1 - indexFingerBase.y - (1 - wrist.y),
-                1 - indexFingerBase.z - (1 - wrist.z)
+                1 - avgFingerBase.x - (1 - wrist.x),
+                1 - avgFingerBase.y - (1 - wrist.y),
+                1 - avgFingerBase.z - (1 - wrist.z)
               ).normalize();
 
               const upDirection = new THREE.Vector3(
@@ -312,6 +354,7 @@
               const handRotation = new THREE.Euler().setFromQuaternion(
                 quaternion
               );
+
               bracelet.rotation.copy(handRotation);
               occluder.rotation.copy(handRotation);
 
