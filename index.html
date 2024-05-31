@@ -276,9 +276,7 @@
               const ringFingerBase = landmarks[13];
               const pinkyBase = landmarks[17];
 
-              const wristSize =
-                calculateDistance(wrist, indexFingerBase) +
-                calculateDistance(indexFingerBase, middleFingerBase);
+              const wristSize = calculateDistance(wrist, indexFingerBase);
 
               // Position and scale the bracelet
               const wristX =
@@ -287,8 +285,7 @@
                 -wrist.y * outputCanvas.height + outputCanvas.height / 2;
               const wristZ = -wrist.z * 100;
 
-              bracelet.position.set(wristX, wristY * 1.25, wristZ);
-              console.log("bracelet potition", wristX, wristY, wristZ);
+              bracelet.position.set(wristX, wristY * 1.25, wristZ / 2);
 
               bracelet.scale.set(
                 wristSize * 100,
@@ -298,11 +295,11 @@
 
               bracelet.visible = true; // Show the bracelet when hands are detected
 
-              occluder.position.set(wristX, wristY * 1.25, wristZ);
+              occluder.position.set(wristX, wristY * 1.25, wristZ / 2);
               occluder.scale.set(
                 wristSize * 78,
-                wristSize * 78,
-                wristSize * 78
+                wristSize * 90,
+                wristSize * 100
               );
               occluder.visible = true; // Show the occluder when hands are detected
 
@@ -335,7 +332,7 @@
 
               const handDirection = new THREE.Vector3(
                 1 - avgFingerBase.x - (1 - wrist.x),
-                1 - avgFingerBase.y - (1 - wrist.y),
+                1 - avgFingerBase.y - (2 - wrist.y),
                 1 - avgFingerBase.z - (1 - wrist.z)
               ).normalize();
 
