@@ -229,23 +229,13 @@
         return axesHelper;
       }
 
-      function clampQuaternion(quaternion, minAngle, maxAngle) {
-        const euler = new THREE.Euler().setFromQuaternion(quaternion, "XYZ");
-
-        euler.x = THREE.MathUtils.clamp(euler.x, minAngle, maxAngle);
-        euler.y = THREE.MathUtils.clamp(euler.y, minAngle, maxAngle);
-        euler.z = THREE.MathUtils.clamp(euler.z, minAngle, maxAngle);
-
-        const clampedQuaternion = new THREE.Quaternion().setFromEuler(euler);
-        return clampedQuaternion;
-      }
-
       function getHandQuaternion(landmarks) {
         const wrist = new THREE.Vector3(
           landmarks[0].x,
           landmarks[0].y,
           landmarks[0].z
         );
+
         const indexFinger = new THREE.Vector3(
           landmarks[5].x,
           landmarks[5].y,
@@ -269,14 +259,16 @@
 
         const rotationMatrix = new THREE.Matrix4().lookAt(
           wrist,
-          indexFinger,
+          pinkyFinger,
           handNormal
         );
+
         const quaternion = new THREE.Quaternion().setFromRotationMatrix(
           rotationMatrix
         );
 
         console.log(quaternion);
+
         return quaternion;
       }
 
@@ -355,7 +347,7 @@
                   -wrist.y * outputCanvas.height + outputCanvas.height / 2;
                 const wristZ = -wrist.z * 100;
 
-                bracelet.position.set(wristX, wristY, wristZ / 2);
+                bracelet.position.set(wristX, wristY, wristZ);
                 bracelet.scale.set(
                   wristSize * 200,
                   wristSize * 200,
@@ -363,7 +355,7 @@
                 );
                 bracelet.visible = true; // Show the bracelet when hands are detected
 
-                occluder.position.set(wristX, wristY, wristZ / 2);
+                occluder.position.set(wristX, wristY, wristZ);
                 occluder.scale.set(
                   wristSize * 150,
                   wristSize * 150,
@@ -373,6 +365,7 @@
 
                 // Calculate and apply rotation
                 const handQuaternion = getHandQuaternion(landmarks);
+
                 bracelet.setRotationFromQuaternion(handQuaternion);
                 occluder.setRotationFromQuaternion(handQuaternion);
               }
