@@ -117,8 +117,8 @@
           });
 
         // improve WebGLRenderer settings:
-        three.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        three.renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.outputEncoding = THREE.sRGBEncoding;
 
         // Create and add the axs helper
         axs = createAxsHelper(50);
@@ -151,8 +151,6 @@
           );
 
           bracelet.applyQuaternion(initialRotation);
-          console.log(initialRotation);
-
           console.log("Bracelet model loaded successfully");
         },
         undefined,
