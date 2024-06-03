@@ -51,6 +51,8 @@
       const outputCtx = outputCanvas.getContext("2d");
       const threeCanvas = document.getElementById("threeCanvas");
 
+      let initialRotation;
+
       // Function to start the video stream
       async function startVideo() {
         try {
@@ -129,7 +131,7 @@
 
       const loader = new THREE.GLTFLoader();
       loader.load(
-        "gelang_1.glb",
+        "gelang_5.glb",
         (gltf) => {
           bracelet = gltf.scene;
           bracelet.traverse((child) => {
@@ -139,6 +141,14 @@
           });
           scene.add(bracelet);
           bracelet.visible = false; // Sembunyikan gelang awalnya
+          // Set initial rotation for right hand
+          initialRotation = new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(Math.PI / 2, 0, 0)
+          );
+
+          bracelet.applyQuaternion(initialRotation);
+          console.log(initialRotation);
+
           console.log("Bracelet model loaded successfully");
         },
         undefined,
@@ -217,9 +227,18 @@
         return axesHelper;
       }
 
-      // Function to handle results from MediaPipe Hands
+      function clampQuaternion(quaternion, minAngle, maxAngle) {
+        const euler = new THREE.Euler().setFromQuaternion(quaternion, "XYZ");
+
+        euler.x = THREE.MathUtils.clamp(euler.x, minAngle, maxAngle);
+        euler.y = THREE.MathUtils.clamp(euler.y, minAngle, maxAngle);
+        euler.z = THREE.MathUtils.clamp(euler.z, minAngle, maxAngle);
+
+        const clampedQuaternion = new THREE.Quaternion().setFromEuler(euler);
+        return clampedQuaternion;
+      }
+
       function onResults(results) {
-        // Clear the canvas and Three.js scene if no hands are detected
         if (
           !results.multiHandLandmarks ||
           results.multiHandLandmarks.length === 0
@@ -276,88 +295,36 @@
               const ringFingerBase = landmarks[13];
               const pinkyBase = landmarks[17];
 
-              const wristSize = calculateDistance(wrist, indexFingerBase);
+              // Check if all necessary landmarks are defined
+              if (
+                wrist &&
+                thumbBase &&
+                indexFingerBase &&
+                middleFingerBase &&
+                ringFingerBase &&
+                pinkyBase
+              ) {
+                const wristSize = calculateDistance(wrist, thumbBase);
 
-              // Position and scale the bracelet
-              const wristX =
-                (1 - wrist.x) * outputCanvas.width - outputCanvas.width / 2;
-              const wristY =
-                -wrist.y * outputCanvas.height + outputCanvas.height / 2;
-              const wristZ = -wrist.z * 100;
+                // Position and scale the bracelet
+                const wristX =
+                  (1 - wrist.x) * outputCanvas.width - outputCanvas.width / 2;
+                const wristY =
+                  -wrist.y * outputCanvas.height + outputCanvas.height / 2;
+                const wristZ = -wrist.z * 100;
 
-              bracelet.position.set(wristX, wristY * 1.25, wristZ / 2);
+                bracelet.position.set(wristX, wristY, wristZ / 2);
+                bracelet.scale.set(
+                  wristSize * 200,
+                  wristSize * 200,
+                  wristSize * 200
+                );
+                bracelet.visible = true; // Show the bracelet when hands are detected
 
-              bracelet.scale.set(
-                wristSize * 100,
-                wristSize * 100,
-                wristSize * 100
-              );
-
-              bracelet.visible = true; // Show the bracelet when hands are detected
-
-              occluder.position.set(wristX, wristY * 1.25, wristZ / 2);
-              occluder.scale.set(
-                wristSize * 78,
-                wristSize * 90,
-                wristSize * 100
-              );
-              occluder.visible = true; // Show the occluder when hands are detected
-
-              // Update the position of the axs helper
-              if (axs) {
-                axs.position.set(wristX, wristY, wristZ);
+                occluder.position.set(wristX, wristY, wristZ / 2);
+                occluder.scale.set(wristSize * 0, wristSize * 0, wristSize * 0);
+                occluder.visible = true; // Show the occluder when hands are detected
               }
-
-              // Calculate the average position of the finger bases
-              const avgFingerBase = new THREE.Vector3(
-                (thumbBase.x +
-                  indexFingerBase.x +
-                  middleFingerBase.x +
-                  ringFingerBase.x +
-                  pinkyBase.x) /
-                  5,
-                (thumbBase.y +
-                  indexFingerBase.y +
-                  middleFingerBase.y +
-                  ringFingerBase.y +
-                  pinkyBase.y) /
-                  5,
-                (thumbBase.z +
-                  indexFingerBase.z +
-                  middleFingerBase.z +
-                  ringFingerBase.z +
-                  pinkyBase.z) /
-                  5
-              );
-
-              const handDirection = new THREE.Vector3(
-                1 - avgFingerBase.x - (1 - wrist.x),
-                1 - avgFingerBase.y - (2 - wrist.y),
-                1 - avgFingerBase.z - (1 - wrist.z)
-              ).normalize();
-
-              const upDirection = new THREE.Vector3(
-                1 - middleFingerBase.x - (1 - wrist.x),
-                1 - middleFingerBase.y - (1 - wrist.y),
-                1 - middleFingerBase.z - (1 - wrist.z)
-              ).normalize();
-
-              const quaternion = new THREE.Quaternion();
-              quaternion.setFromUnitVectors(
-                new THREE.Vector3(0, 0, -1),
-                handDirection
-              );
-
-              const handRotation = new THREE.Euler().setFromQuaternion(
-                quaternion
-              );
-
-              bracelet.rotation.copy(handRotation);
-              occluder.rotation.copy(handRotation);
-
-              // Adjust the bracelet orientation to ensure it faces the correct direction
-              bracelet.rotation.z += Math.PI / 2;
-              occluder.rotation.z += Math.PI / 2;
             }
           });
 
