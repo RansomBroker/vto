@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="RGBELoader.js"></script>
     <style>
       body {
         display: flex;
@@ -52,6 +53,8 @@
       const threeCanvas = document.getElementById("threeCanvas");
 
       let initialRotation;
+      let renderer, scene, camera, bracelet, occluder;
+      let axs;
 
       // Function to start the video stream
       async function startVideo() {
@@ -83,8 +86,6 @@
       hands.onResults(onResults);
 
       // Three.js setup
-      let renderer, scene, camera, bracelet, occluder;
-      let axs;
       try {
         renderer = new THREE.WebGLRenderer({
           canvas: threeCanvas,
@@ -103,18 +104,21 @@
         );
         camera.position.z = 1;
 
-        // Add ambient light to the scene
-        const ambientLight = new THREE.AmbientLight(0x404040, 3); // soft white light
-        scene.add(ambientLight);
+        // set lightning
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        pmremGenerator.compileEquirectangularShader();
 
-        // Add directional light to the scene
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(0, 1, 1).normalize();
-        scene.add(directionalLight);
+        new THREE.RGBELoader()
+          .setDataType(THREE.HalfFloatType)
+          .load("hotel_room_1k.hdr", function (texture) {
+            const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+            pmremGenerator.dispose();
+            scene.environment = envMap;
+          });
 
-        // Adjust the directional light to face the camera
-        directionalLight.target.position.set(0, 0, -1);
-        scene.add(directionalLight.target);
+        // improve WebGLRenderer settings:
+        three.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        three.renderer.outputEncoding = THREE.sRGBEncoding;
 
         // Create and add the axs helper
         axs = createAxsHelper(50);
